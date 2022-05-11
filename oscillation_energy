@@ -1,1 +1,218 @@
+import numpy as np
+import numpy.linalg as LA 
+from numpy import zeros
+import math
+import matplotlib.pyplot as plt
+import networkx as nx
+import random
+from matplotlib.image import imread
+import matplotlib.colors
+from mpl_toolkits.mplot3d import Axes3D
 
+#print設定
+np.set_printoptions(precision=3, suppress=True,linewidth=300)
+
+#ノード数
+n=25
+
+#二次元格子ネットワーク生成
+G=nx.grid_2d_graph(5,5)
+plt.cla()
+nx.draw_networkx(G)
+plt.show()
+
+#隣接行列取得
+a = nx.to_numpy_matrix(G)
+A = np.array(a)
+#print(A)
+
+#隣接行列から次数行列生成
+d = np.zeros_like(A)
+
+dd = np.sum(A, axis=1)
+
+for i in range(0 , n , 1):
+    d[i , i] = dd[i]
+D = np.array(d)
+#print(D)
+
+#ラプラシアン行列
+L = D - A              
+#print(L)
+
+#wが固有値,Vが固有ベクトル
+w, V = LA.eig(L)
+#print(w)
+
+
+#固有ベクトルを正規直交化V→v
+v,r = np.linalg.qr(V)
+#print(v)
+
+#固有値ごとの固有ベクトル
+vv =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    vv[i]=v[ : , i] 
+    #print(vv[i])
+
+
+
+
+#r0=減衰係数1,r1=減衰係数2,rw=固有値依存の減衰係数,Rw=閾値
+r0 = 0
+r1 = 0.5
+rw =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    if w[i] == 0:
+        rw[i] = 0
+    else:
+        rw[i] = r0 + r1 * w[i]
+Rw =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    Rw[i] = (rw[i]/2)**2
+    
+#初期条件
+x0 =[0 for i in range(500)]
+x0[0] = zeros(25)
+st = random.randint(0,24)
+x0[0][st] = 1 
+
+#変位の時間変化
+def xt(t):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        amu0[i] = np.dot(x0[j-1],vv[i])
+        
+    a_t = [0 for i in range(n)]
+    sumx = 0
+    for i in range(0,n,1):
+        if w[i] > Rw[i]:
+            a_t[i] = amu0[i] * math.exp(-(rw[i]/2)*t)*(math.cos(math.sqrt(w[i]-Rw[i])*t)+(rw[i]/(2*math.sqrt(w[i]-Rw[i])))*math.sin(math.sqrt(w[i]-Rw[i])*t)) * vv[i]
+            sumx += a_t[i]
+        elif w[i] < Rw[i]:
+            a_t[i] = amu0[i] * math.exp(-(rw[i]/2)*t)*((1/2)*(math.exp(-math.sqrt(Rw[i] - w[i])*t)+math.exp(math.sqrt(Rw[i] - w[i])*t)) \
+                   -(rw[i]/(4*math.sqrt(Rw[i] - w[i])))*(math.exp(-math.sqrt(Rw[i] - w[i])*t)-math.exp(math.sqrt(Rw[i] - w[i])*t))) * vv[i]
+            sumx += a_t[i]
+    return sumx
+
+for j in range(1 , 500 , 1):
+    x0[j] = zeros(25)
+    st = random.randint(0,24)
+    x0[j][st] = 1
+    xt(j/50)
+    x0[j] += xt(j/50)
+    #print(x0[j])
+    #x0[i][st] = random.gauss(1,0.2)
+    #x0[i][st] = 1
+    #x0[i][0] = 1
+    #print(x0[i])    
+
+#初期条件（交差項）
+
+
+#振動エネルギーを求める関数
+def Et(tt):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        amu0[i] = np.dot(x0[int(tt*50)],vv[i])
+        
+    #振動モードごとの振動エネルギー
+    s = 0
+    E = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        if w[i] > Rw[i]:
+            E[i] = math.exp(-rw[i]*tt) * (w[i]-Rw[i]) * amu0[i] * amu0[i] * ((1/2)+((rw[i]*rw[i])/(8*(w[i]-Rw[i]))))
+            s += 1
+            #print(i,"番目が減衰振動,固有値は",w[i])
+        elif w[i] <= Rw[i]:
+            E[i] = 0
+    #print("減衰振動の数は",s,"/",n)
+    #print("過減衰の数は",n-s,"/",n)
+
+    #振動モードが各ノードに与えるエネルギー
+    Ei = [0 for i in range(n)]
+    for j in range(0, n ,1):
+        for i in range(0, n ,1):
+            a = E[i] * v[j , i] * v[j , i]
+            Ei[j] = Ei[j] + a
+
+
+    z = zeros((int(np.sqrt(n)),int(np.sqrt(n))), dtype=float)
+
+    for k in range(0, n ,1):
+            if 0 <= k <=4:
+                z[0][k] = Ei[k]
+            elif 5 <= k <= 9:
+                z[1][k-5] = Ei[k]
+            elif 10 <= k <= 14:
+                z[2][k-10] = Ei[k]
+            elif 15 <= k <= 19:
+                z[3][k-15] = Ei[k]
+            else:
+                z[4][k-20] = Ei[k]
+            #print(Ei[j])
+
+    return z
+
+
+def plot(sumz):
+    """
+    fig = plt.figure(figsize=(25, 4))
+    ax = fig.add_subplot(111)
+    color = ax.imshow(sumz, vmin=0,vmax=0.1,cmap='jet',)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    plt.colorbar(color, shrink=0.8, label='z')
+    plt.show()
+    """
+    fig = plt.figure(figsize=(13, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    # 格子点を生成
+    y, x = np.mgrid[:sumz.shape[0], :sumz.shape[1]]
+    color = ax.plot_surface(x, y, sumz, cmap='jet',vmin=0,vmax=0.015)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    ax.set_xlim(0, np.max(4))
+    ax.set_ylim(0, np.max(4))
+    ax.set_zlim(0, np.max(0.015))
+    cbar = plt.colorbar(color, shrink=0.3, label='oscillation energy')
+    plt.show()
+    #fig.savefig("1.5,5,t="+str(t)+"OE.png")
+SSUM=0
+for k in range(0, 20,1):
+    SUM = 0
+    for t in np.arange(0, 10 , 0.02):
+        Et(t)
+        Et(t+0.01)
+        SUM += Et(t)
+        SUM += Et(t+0.01)
+    ave = SUM/1000
+    #print(ave)
+    #plot(ave)
+    SSUM += ave
+AVE=SSUM/20
+print(AVE)
+plot(AVE)
+
+"""
+for t in np.arange(0 , 1 , 0.02):
+    sumz = Et(t)
+    a = t
+    c=0
+    while a >= 0.02:
+        a = a - 0.02
+        sumz += Et(a-0.02)
+    else:
+        b = 0
+        #plot(sumz)
+        #print(t,"=は",sumz)
+        
+    SUM += sumz
+
+ave = SUM / 50
+plot(ave)
+print("ave=",ave)
+"""
