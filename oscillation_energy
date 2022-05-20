@@ -111,7 +111,7 @@ for j in range(1 , 500 , 1):
 #初期条件（交差項）
 
 
-#振動エネルギーを求める関数
+#ノードiの振動エネルギーを求める関数
 def Et(tt):
     #amu0の計算
     amu0 = [0 for i in range(n)]
