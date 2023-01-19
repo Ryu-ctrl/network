@@ -1,0 +1,265 @@
+import numpy as np
+import numpy.linalg as LA 
+from numpy import zeros
+import math
+import matplotlib.pyplot as plt
+import networkx as nx
+import random
+from matplotlib.image import imread
+import matplotlib.colors
+from mpl_toolkits.mplot3d import Axes3D
+#print設定
+np.set_printoptions(precision=3, suppress=True,linewidth=300)
+
+#乱数シード 22○ 23△ 31△ 38○ 39○  45◎
+np.random.seed(28)
+
+#ノード数
+n=25
+# 新規ノード接続リンク数
+m=2
+
+print('BA network')
+BA = nx.barabasi_albert_graph(n, m,seed=13)
+print(nx.info(BA))
+nx.draw_kamada_kawai(BA)
+#print("nodes:", BA.nodes())
+print("degrees:", BA.degree())
+dsum=0
+for i in range(0,n,1):
+    x=BA.degree(i)
+    dsum+=x
+
+#時間の長さ
+TIME = 100
+
+#隣接行列取得
+a = nx.to_numpy_matrix(BA)
+A = np.array(a)
+#print(A)
+
+#隣接行列から次数行列生成
+d = np.zeros_like(A)
+
+dd = np.sum(A, axis=1)
+
+for i in range(0 , n , 1):
+    d[i , i] = dd[i]
+#print(d)
+D = np.array(d)
+#print(D)
+
+#ラプラシアン行列
+L = D - A              
+#print(L)
+
+#wが固有値,Vが固有ベクトル
+w, V = LA.eig(L)
+print(w)
+
+
+#固有ベクトルを正規直交化V→v
+v,r = np.linalg.qr(V)
+#print(v)
+
+#固有値ごとの固有ベクトル
+vv =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    vv[i]=v[ : , i] 
+    
+########################################################################################################
+########################################################################################################
+########################################################################################################
+#r0=減衰係数1,r1=減衰係数2,rw=固有値依存の減衰係数,Rw=閾値 0.75,1.3
+#0_1.5_seed(11)
+#1.67_0.57_seed(45)
+#2.319_0.431_seed(28)
+#seed(28)_3.6_2.77
+#seed(28)_1.61_0.6211
+r0 = 3.6
+r1 = 0.277
+rw =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    if w[i] == 0:
+        rw[i] = 0
+    else:
+        rw[i] = r0 + r1 * w[i]
+Rw =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    Rw[i] = (rw[i]/2)**2
+    
+#初期条件
+x0 =[0 for i in range(TIME*50)]
+x0[0] = zeros(n)
+st = random.randint(0,n)
+#x0[0][0] = 1
+
+v0 =[0 for i in range(TIME*50)]
+v0[0] = zeros(n)
+
+#変位の時間変化を求める関数
+def xt(t):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        amu0[i] = np.dot(x0[j-1],vv[i])
+    
+    #Amu0の計算
+    Amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        Amu0[i] = np.dot(v0[j-1],vv[i])
+    
+    a_t = [0 for i in range(n)]
+    sumx = 0
+    for i in range(0,n,1):
+        if w[i] > Rw[i]:
+            a_t[i] = math.exp(-(rw[i]/2)*t)*(amu0[i]*math.cos(math.sqrt(w[i]-Rw[i])*t)+((rw[i]*amu0[i]+2*Amu0[i])/(2*math.sqrt(w[i]-Rw[i])))*math.sin(math.sqrt(w[i]-Rw[i])*t)) * vv[i]
+            sumx += a_t[i]
+        elif w[i] < Rw[i]:
+            a_t[i] = ((((-(rw[i]/2) + math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t - math.sqrt(Rw[i]-w[i])*t)) +
+                           (((-(rw[i]/2) - math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(-2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t + math.sqrt(Rw[i]-w[i])*t))) *vv[i]
+            sumx += a_t[i]
+    return sumx
+
+#速度の時間変化を求める関数
+def vt(t):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        amu0[i] = np.dot(x0[j-1],vv[i])
+        
+    #Amu0の計算
+    Amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        Amu0[i] = np.dot(v0[j-1],vv[i])        
+        
+    A_t = [0 for i in range(n)]
+    sumv = 0
+    for i in range(0,n,1):
+        if w[i] > Rw[i]:
+            A_t[i] =  np.exp(-(rw[i]/2)*t) * (-(rw[i]/2)*amu0[i]*math.cos(math.sqrt(w[i]-Rw[i])*t) - (rw[i]/2)*((rw[i]*amu0[i]+2*Amu0[i])/(2*math.sqrt(w[i]-Rw[i])))*math.sin(math.sqrt(w[i]-Rw[i])*t)\
+                            + math.cos(math.sqrt(w[i]-Rw[i])*t)*((rw[i]*amu0[i]+2*Amu0[i])/2) - amu0[i]*math.sqrt(w[i]-Rw[i])*math.sin(math.sqrt(w[i]-Rw[i])*t)) * vv[i]
+            sumv += A_t[i]
+        elif w[i] < Rw[i]:
+            A_t[i] = ((-(rw[i]/2) - math.sqrt(Rw[i]-w[i]))*(((-(rw[i]/2) + math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t - math.sqrt(Rw[i]-w[i])*t)) +
+                            (-(rw[i]/2) + math.sqrt(Rw[i]-w[i]))*(((-(rw[i]/2) - math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(-2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t + math.sqrt(Rw[i]-w[i])*t))) *vv[i]
+            sumv += A_t[i]
+    return sumv   
+
+for j in range(1 , TIME*50 , 1):
+    x0[j] = zeros(n)
+    #st = np.random.randint(0,n)
+    #print(st)
+    #st = j%25
+    #print(st)
+    #st =16
+    #st = random.randint(0,12)
+    st = np.random.choice([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24],p=[BA.degree(0)/dsum,BA.degree(1)/dsum,BA.degree(2)/dsum,BA.degree(3)/dsum,BA.degree(4)/dsum,BA.degree(5)/dsum,BA.degree(6)/dsum,BA.degree(7)/dsum,BA.degree(8)/dsum,BA.degree(9)/dsum,BA.degree(10)/dsum,BA.degree(11)/dsum,BA.degree(12)/dsum,BA.degree(13)/dsum,BA.degree(14)/dsum,BA.degree(15)/dsum,BA.degree(16)/dsum,BA.degree(17)/dsum,BA.degree(18)/dsum,BA.degree(19)/dsum,BA.degree(20)/dsum,BA.degree(21)/dsum,BA.degree(22)/dsum,BA.degree(23)/dsum,BA.degree(24)/dsum])
+    #u = np.random.choice([-1, 1], p=[0.5, 0.5])
+    x0[j][st] = 1
+    xt(1/50)
+    x0[j] += xt(1/50)
+    #print(j/50,st,x0[j]) ⇦
+    #x0[i][st] = random.gauss(1,0.2)
+    #x0[i][st] = 1
+    #x0[i][0] = 1
+    #print(x0[i])    
+
+    v0[j] = zeros(n)
+    vt(1/50)
+    v0[j] += vt(1/50)     
+    #print(j/50,st,v0[j])
+    
+
+#ノードiの振動エネルギーを求める関数
+def Et(tt):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        amu0[i] = np.dot(x0[int(t*50)],vv[i])
+    
+    #Amu0の計算
+    Amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        Amu0[i] = np.dot(v0[int(t*50)],vv[i])        
+
+    #振動モードごとの振動エネルギー
+    s = 0
+    E = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        if w[i] > Rw[i]:
+            E[i] = math.exp(-rw[i]*tt) * ((amu0[i]**2/2)*w[i] + (rw[i]*amu0[i]*Amu0[i]/4) + (Amu0[i]**2/2))
+            s += 1
+            
+        elif w[i] <= Rw[i]:
+            E[i] = 0
+    #print(i,"番目が減衰振動,固有値は",w[i])
+    #print("減衰振動の数は",s,"/",n)
+    #print("過減衰の数は",n-s,"/",n)
+
+    #振動モードが各ノードに与えるエネルギー
+    Ei = [0 for i in range(n)]
+    for j in range(0, n ,1):
+        for i in range(0, n ,1):
+            a = E[i] * v[j , i] * v[j , i]
+            Ei[j] = Ei[j] + a
+            
+    z = zeros(n, dtype=float)
+    for i in range(0,n,1):
+        z[i] = Ei[i]
+    return z
+
+#ネットワーク全体の振動エネルギーを求める関数
+def E(tt):
+    ESUM =0
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        amu0[i] = np.dot(x0[int(t*50)],vv[i])
+        
+    Amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        Amu0[i] = np.dot(v0[int(t*50)],vv[i]) 
+        
+    #振動モードごとの振動エネルギー
+    s = 0
+    E = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        if w[i] > Rw[i]:
+            E[i] = math.exp(-rw[i]*tt) * ((amu0[i]**2/2)*w[i] + (rw[i]*amu0[i]*Amu0[i]/4) + (Amu0[i]**2/2))
+            ESUM += E[i]
+            #print(i,"番目が減衰振動,固有値は",w[i])
+        elif w[i] < Rw[i]:
+            E[i] = 0
+    return ESUM
+    #print("減衰振動の数は",s,"/",n)
+    #print("過減衰の数は",n-s,"/",n)
+
+
+SSUM=0
+bb = list(range(0))
+for k in range(0,1,1):
+    SUM = 0
+    for t in np.arange(0, TIME , 0.02):
+        Et(0)
+        bb.append(E(0))
+        Et(0.01)
+        bb.append(E(0.01))
+        SUM += Et(0)
+        SUM += Et(0.01)
+        #if  t.is_integer() == True:
+        #print('t=',t,'，',E(0)) 　⇦
+    ave = SUM/(TIME*10)
+    #print(ave)
+    #plot(ave)
+    SSUM += ave
+
+SSUM += ave
+plt.figure()
+aa = np.arange(0, TIME, 0.01) #-5から5まで0.1区切りで配列を作る
+plt.plot(aa,bb) # この場合のplot関数の第一引数xは、x軸に対応し、第二引数のyがy軸にあたります。
+plt.xlabel("t",fontsize=18)
+plt.ylabel("oscillation energy",fontsize=18)
+plt.show()
+AVE=SSUM/1
+print(AVE)
