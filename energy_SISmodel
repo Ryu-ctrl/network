@@ -1,0 +1,332 @@
+#IとIを切り離してSにつなぐ
+
+import numpy as np
+import numpy.linalg as LA 
+from numpy import zeros
+import math
+import matplotlib.pyplot as plt
+import networkx as nx
+import random
+from matplotlib.image import imread
+import matplotlib.colors
+from mpl_toolkits.mplot3d import Axes3D
+import copy
+import collections
+#print設定
+np.set_printoptions(precision=3, suppress=True,linewidth=300)
+
+np.random.seed(1)
+random.seed(1)
+
+#ノード数
+n=100
+
+# 新規ノード接続リンク数
+m=2
+
+print('BA network')
+BA = nx.barabasi_albert_graph(n, m,seed=13)
+#print(nx.info(BA))
+nx.draw_kamada_kawai(BA)
+#print("nodes:", BA.nodes())
+#print("degrees:", BA.degree())
+
+"""
+BA=nx.grid_2d_graph(5,5)
+plt.cla()
+nx.draw_networkx(BA)
+plt.show()
+"""
+
+#時間の長さ
+TIME = 2000
+
+#刺激の時間感覚
+time=0.1
+
+#隣接行列取得
+a = nx.to_numpy_matrix(BA)
+A = np.array(a)
+#print(A)
+
+#隣接行列から次数行列生成
+d = np.zeros_like(A)
+
+dd = np.sum(A, axis=1)
+
+for i in range(0 , n , 1):
+    d[i , i] = dd[i]
+#print(d)
+D = np.array(d)
+#print(D)
+
+#ラプラシアン行列
+L = D - A              
+print(L)
+
+#wが固有値,Vが固有ベクトル
+w, V = LA.eig(L)
+print(w)
+
+
+#固有ベクトルを正規直交化V→v
+v,r = np.linalg.qr(V)
+#print(v)
+
+#固有値ごとの固有ベクトル
+vv =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    vv[i]=v[ : , i] 
+    
+########################################################################################################
+########################################################################################################
+########################################################################################################
+#r0=減衰係数1,r1=減衰係数2,rw=固有値依存の減衰係数,Rw=閾値 0.75,1.3
+#0_1.5_seed(11)
+#1.67_0.57_seed(45)
+#2.319_0.431_seed(28)
+#seed(28)_3.6_2.77
+#seed(28)_1.61_0.6211
+r0 = 0.5
+r1 = 0.5
+rw =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    if w[i] == 0:
+        rw[i] = 0
+    else:
+        rw[i] = r0 + r1 * w[i]
+Rw =[0 for i in range(n)]
+for i in range(0 , n , 1):
+    Rw[i] = (rw[i]/2)**2
+    
+#初期条件
+x0 =[0 for i in range(TIME*int(1/time))]
+x0[0] = zeros(n)
+st = random.randint(0,n)
+#x0[0][0] = 1
+
+v0 =[0 for i in range(TIME*int(1/time))]
+v0[0] = zeros(n)
+
+#変位の時間変化を求める関数
+def xt(t):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        amu0[i] = np.dot(x0[j-1],vv[i])
+    
+    #Amu0の計算
+    Amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        Amu0[i] = np.dot(v0[j-1],vv[i])
+    
+    a_t = [0 for i in range(n)]
+    sumx = 0
+    for i in range(0,n,1):
+        if w[i] > Rw[i]:
+            a_t[i] = math.exp(-(rw[i]/2)*t)*(amu0[i]*math.cos(math.sqrt(w[i]-Rw[i])*t)+((rw[i]*amu0[i]+2*Amu0[i])/(2*math.sqrt(w[i]-Rw[i])))*math.sin(math.sqrt(w[i]-Rw[i])*t)) * vv[i]
+            sumx += a_t[i]
+        elif w[i] < Rw[i]:
+            a_t[i] = ((((-(rw[i]/2) + math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t - math.sqrt(Rw[i]-w[i])*t)) +
+                           (((-(rw[i]/2) - math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(-2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t + math.sqrt(Rw[i]-w[i])*t))) *vv[i]
+            sumx += a_t[i]
+    return sumx
+
+#速度の時間変化を求める関数
+def vt(t):
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        amu0[i] = np.dot(x0[j-1],vv[i])
+        
+    #Amu0の計算
+    Amu0 = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        Amu0[i] = np.dot(v0[j-1],vv[i])        
+        
+    A_t = [0 for i in range(n)]
+    sumv = 0
+    for i in range(0,n,1):
+        if w[i] > Rw[i]:
+            A_t[i] =  np.exp(-(rw[i]/2)*t) * (-(rw[i]/2)*amu0[i]*math.cos(math.sqrt(w[i]-Rw[i])*t) - (rw[i]/2)*((rw[i]*amu0[i]+2*Amu0[i])/(2*math.sqrt(w[i]-Rw[i])))*math.sin(math.sqrt(w[i]-Rw[i])*t)\
+                            + math.cos(math.sqrt(w[i]-Rw[i])*t)*((rw[i]*amu0[i]+2*Amu0[i])/2) - amu0[i]*math.sqrt(w[i]-Rw[i])*math.sin(math.sqrt(w[i]-Rw[i])*t)) * vv[i]
+            sumv += A_t[i]
+        elif w[i] < Rw[i]:
+            A_t[i] = ((-(rw[i]/2) - math.sqrt(Rw[i]-w[i]))*(((-(rw[i]/2) + math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t - math.sqrt(Rw[i]-w[i])*t)) +
+                            (-(rw[i]/2) + math.sqrt(Rw[i]-w[i]))*(((-(rw[i]/2) - math.sqrt(Rw[i]-w[i]))*amu0[i]-Amu0[i])/(-2*math.sqrt(Rw[i]-w[i]))) * (np.exp(-(rw[i]/2)*t + math.sqrt(Rw[i]-w[i])*t))) *vv[i]
+            sumv += A_t[i]
+    return sumv   
+
+#ネットワーク全体の振動エネルギーを求める関数
+def E(tt):
+    ESUM =0
+    #amu0の計算
+    amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        amu0[i] = np.dot(x0[j],vv[i])
+        
+    Amu0 = [0 for i in range(n)]
+    for i in range(0,n,1):
+        Amu0[i] = np.dot(v0[j],vv[i]) 
+        
+    #振動モードごとの振動エネルギー
+    s = 0
+    E = [0 for i in range(n)]
+    for i in range(0 , n , 1):
+        if w[i] > Rw[i]:
+            E[i] = math.exp(-rw[i]*tt) * ((amu0[i]**2/2)*w[i] + (rw[i]*amu0[i]*Amu0[i]/4) + (Amu0[i]**2/2))
+            ESUM += E[i]
+            #print(i,"番目が減衰振動,固有値は",w[i])
+        elif w[i] < Rw[i]:
+            E[i] = 0
+    return ESUM
+    #print("減衰振動の数は",s,"/",n)
+    #print("過減衰の数は",n-s,"/",n)
+    
+#ノードにS状態(0), I状態(1)を付与
+#print(BA.nodes)
+state = np.zeros(n)
+#print(state)
+
+#初期条件ノード1がI状態
+initial = 0
+#initial = random.randint(0,n-1)
+#print("初期ノード次数",BA.degree(initial),initial)
+state[initial] = 1
+#print(0,state)
+#for x in range(1,n,2):
+#    state[x] = 1
+state_list0 = state.tolist()
+
+#SISモデルパラメータ
+lam = 0.5
+u = 0.2
+m = 0.5
+j=0
+
+#構造変化のタイミング
+change=100*(1/time)
+
+y = list(range(0))
+y.append(E(0))
+y.append(E(0.05))
+yy = list(range(0))
+yy.append(0)
+
+for j in range(1 , int(TIME*(1/time)) , 1):
+    if j%change == 0:
+        state_copy = copy.copy(state)
+        A_copy = copy.copy(A) 
+        count=0
+        for s in range(0 , n , 1):
+                    if state[s] == 1:
+                        for k in range(s+1 , n , 1):
+                            if A[s][k] == 1 :
+                                if state[k] == 1:
+                                    threshold3 = random.random()
+                                    if threshold3 < m:
+                                        count += 1
+                                        A_copy[s][k] = 0
+                                        A_copy[k][s] = 0
+                                        newlink =[]
+                                        for l in range(0 , n , 1):
+                                            if A[s][l] == 0 and s != l and k != l and state[l]==1:
+                                                newlink.append(l)
+                                        if len(newlink) == 0:
+                                            count -= 1
+                                            A_copy[s][k] = 1
+                                            A_copy[k][s] = 1
+                                        else:
+                                            new = random.choice(newlink)
+                                            A_copy[s][new] = 1
+                                            A_copy[new][s] = 1
+                        for o in range(0 , n , 1):
+                            if A[s][o] ==1 and state[o]==0:
+                                threshold2 = random.random()
+                                if threshold2 < lam:
+                                    state_copy[o] = 1
+                        threshold1 = random.random()
+                        if threshold1 < u:
+                            state_copy[s] = 0
+        print("張り替え回数",count)
+        yy.append(count)
+        state = state_copy
+        A = A_copy
+
+        #print(i , '\n' , A)
+        #print(i,state)
+        state_list = state.tolist()
+        P = state_list.count(1)/n
+        print(j/(1/time),"の時のIの割合",P)
+        
+        #隣接行列から次数行列生成
+        d = np.zeros_like(A)
+        dd = np.sum(A, axis=1)
+        for i in range(0 , n , 1):
+            d[i , i] = dd[i]
+        #print(d)
+        D = np.array(d)
+        #print(D)
+        #ラプラシアン行列
+        L = D - A              
+        print(L)
+        #wが固有値,Vが固有ベクトル
+        w, V = LA.eig(L)
+        print(w)
+        #固有ベクトルを正規直交化V→v
+        v,r = np.linalg.qr(V)
+        #print(v)
+        #固有値ごとの固有ベクトル
+        vv =[0 for i in range(n)]
+        for i in range(0 , n , 1):
+            vv[i]=v[ : , i] 
+        
+        x0[j] = zeros(n)
+        st = np.random.randint(0,n)
+        x0[j][st] = 1
+        xt(time)
+        x0[j] = x0[j] + xt(time)
+        #print(j,st,x0[j]) 
+
+        v0[j] = zeros(n)
+        vt(time)
+        v0[j] = v0[j] + vt(time)     
+        #print(j,st,v0[j])
+        
+        print(j/(1/time),"の時",E(0))
+        y.append(E(0))
+        y.append(E(time/2))
+        
+    else:
+        #print(L)
+        x0[j] = zeros(n)
+        st = np.random.randint(0,n)
+        x0[j][st] = 1
+        xt(time)
+        x0[j] = x0[j] + xt(time)
+        #print(j,st,x0[j]) 
+
+        v0[j] = zeros(n)
+        vt(time)
+        v0[j] = v0[j] + vt(time)     
+        #print(j,st,v0[j])
+        #print(j/(1/time),"の時",E(0))
+        y.append(E(0))
+        y.append(E(time/2))
+        
+fig=plt.figure()
+x = np.arange(0, TIME , time/2) #-5から5まで0.1区切りで配列を作る
+xx = np.arange(0, TIME , change/(1/time) )
+print(yy)
+
+ax1 = fig.subplots()
+ax2 = ax1.twinx()
+
+ax1.plot(x,y)
+ax2.plot(xx,yy,color='red', marker='o')
+ax1.set_xlabel("t",fontsize=18)
+ax1.set_ylabel("energy",fontsize=18)
+ax2.set_ylabel("number of rewirirng",fontsize=18)
+ax1.set_ylim(0, 300)
+ax2.set_ylim(0,100)
+plt.show()
