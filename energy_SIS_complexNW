@@ -34,7 +34,7 @@ for seeed in range(10,20,1):
         #ax.hist(degree)
         #plt.show()
 
-        print(nx.info(network))
+        #print(nx.info(network))
         #print('L=', nx.average_shortest_path_length(network))
         #print('C=', nx.average_clustering(network))
 
@@ -69,7 +69,7 @@ for seeed in range(10,20,1):
         time=0.1
 
         #隣接行列取得
-        a = nx.to_numpy_matrix(network)
+        a = nx.to_numpy_array(network)
         A = np.array(a)
         #print(A)
 
